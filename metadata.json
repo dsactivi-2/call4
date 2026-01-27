@@ -1,0 +1,8 @@
+{
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ],
+  "name": "Jobstep Recruitment Agent",
+  "description": ""
+}
