@@ -13,12 +13,15 @@ export interface ToolExecution {
   result?: any;
 }
 
+export type AgentCategory = 'Recruitment' | 'Sales' | 'Housing' | 'Support' | 'Finance' | 'Retention' | 'General' | string; // Expanded categories
+export type AgentVoice = 'Fenrir' | 'Kore' | 'Puck' | 'Charon' | 'Zephyr';
+
 export interface Agent {
   id: string;
   name: string;
-  category: 'Recruitment' | 'Sales' | 'Housing' | 'Support' | 'Finance' | 'Retention' | string; // Expanded categories
+  category: AgentCategory;
   systemPrompt: string;
-  voiceName: 'Fenrir' | 'Kore' | 'Puck' | 'Charon' | 'Zephyr';
+  voiceName: AgentVoice;
   avatarColor: string;
   skills: string[];
   rawConfig?: string;

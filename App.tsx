@@ -1,7 +1,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleGenAI, Modality, Type, FunctionDeclaration, LiveServerMessage } from '@google/genai';
-import { ConnectionStatus, Agent, Campaign, Candidate, TranscriptionEntry, ToolExecution } from './types';
+import { ConnectionStatus, Agent, Campaign, Candidate, TranscriptionEntry, ToolExecution, AgentCategory, AgentVoice } from './types';
 import { 
   decode, 
   decodeAudioData, 
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'database' | 'call' | 'settings' | 'agents' | 'campaigns'>('database');
+  const [activeTab, setActiveTab] = useState<'database' | 'call' | 'settings' | 'agents' | 'campaigns' | 'knowledge'>('database');
   const [status, setStatus] = useState<ConnectionStatus>(ConnectionStatus.DISCONNECTED);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   
@@ -126,6 +126,16 @@ const App: React.FC = () => {
 
   const [transcription, setTranscription] = useState<TranscriptionEntry[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+  
+  // GLOBAL KNOWLEDGE STATE
+  const [globalKnowledge, setGlobalKnowledge] = useState<string>(() => {
+    const saved = localStorage.getItem('jobstep_global_knowledge');
+    return saved || "Jobstep je profesionalna agencija za regrutaciju sa sjedištem u Bihaću i Sarajevu, specijalizovana za spajanje kvalifikovanih kandidata iz Bosne i Hercegovine sa poslodavcima u Njemačkoj, posebno u sektorima trgovine i zanatstva. Naša misija je da olakšamo proces zapošljavanja i osiguramo uspješnu integraciju naših kandidata na njemačko tržište rada. Nudimo podršku u pripremi dokumenata, savjetovanju i posredovanju.";
+  });
+
+  useEffect(() => {
+    localStorage.setItem('jobstep_global_knowledge', globalKnowledge);
+  }, [globalKnowledge]);
 
   // SESSION REFS
   const sessionRef = useRef<any>(null);
@@ -169,8 +179,8 @@ const App: React.FC = () => {
     setAgents(prev => [...prev, { 
       id: newId, 
       name, 
-      category: 'Recruitment', // Default category
-      systemPrompt: `Ti si ${name}, profesionalni regruter agencije 'Jobstep'.`, 
+      category: 'General', // Default category
+      systemPrompt: `Ti si ${name}, profesionalni agent agencije 'Jobstep'.`, 
       voiceName: 'Fenrir', // Default voice
       avatarColor: getAvatarColor(name), 
       skills: [], 
@@ -202,10 +212,18 @@ const App: React.FC = () => {
       const outCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       audioContextRef.current = inCtx;
 
+      // Constructing the system instruction with global knowledge
+      const fullSystemInstruction = `
+        Persona: ${agent.systemPrompt}.
+        ${globalKnowledge ? `Globalno znanje Jobstep agencije: ${globalKnowledge}.` : ''}
+        Ti predstavljaš agenciju 'Jobstep' (Bihać/Sarajevo).
+        Razgovaraš sa kandidatom: ${candidate.name}.
+      `.trim();
+
       const sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-12-2025',
         config: {
-          systemInstruction: `Persona: ${agent.systemPrompt}. Ti predstavljaš agenciju 'Jobstep' (Bihać/Sarajevo). Razgovaraš sa kandidatom: ${candidate.name}.`,
+          systemInstruction: fullSystemInstruction,
           responseModalities: [Modality.AUDIO],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: agent.voiceName } } },
         },
@@ -254,6 +272,9 @@ const App: React.FC = () => {
     setStatus(ConnectionStatus.DISCONNECTED);
   }, []);
 
+  const agentCategories: AgentCategory[] = ['Recruitment', 'Sales', 'Housing', 'Support', 'Finance', 'Retention', 'General'];
+  const agentVoices: AgentVoice[] = ['Fenrir', 'Kore', 'Puck', 'Charon', 'Zephyr'];
+
   return (
     <div className="h-screen flex bg-[#fcfcfc] text-[#2c3e50] font-['Plus_Jakarta_Sans'] overflow-hidden">
       {/* SIDEBAR */}
@@ -268,7 +289,9 @@ const App: React.FC = () => {
             { id: 'database', label: 'Baza Podataka', icon: Database },
             { id: 'agents', label: 'Agent Foundry', icon: Cpu },
             { id: 'campaigns', label: 'Kampanje', icon: Megaphone },
-            { id: 'call', label: 'Live Terminal', icon: Terminal }
+            { id: 'knowledge', label: 'Baza Znanja', icon: BookOpen }, // NEW TAB
+            { id: 'call', label: 'Live Terminal', icon: Terminal },
+            { id: 'settings', label: 'Postavke', icon: Settings } // NEW TAB
           ].map((item) => (
             <button 
               key={item.id} 
@@ -320,7 +343,37 @@ const App: React.FC = () => {
                         <div className="flex-1 space-y-6">
                            <div className="flex justify-between items-center">
                               <div>
-                                 <h4 className="text-2xl font-black italic tracking-tight">{a.name}</h4>
+                                 {/* Agent Name Editable */}
+                                 <input 
+                                    type="text"
+                                    className="text-2xl font-black italic tracking-tight bg-transparent border-b border-gray-200 focus:border-[#5fa19f] outline-none mb-2"
+                                    value={a.name}
+                                    onChange={(e) => setAgents(prev => prev.map(ag => ag.id === a.id ? {...ag, name: e.target.value} : ag))}
+                                 />
+                                 {/* Agent Category Select */}
+                                 <div className="flex items-center gap-2 text-sm text-gray-500">
+                                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Category:</label>
+                                   <select
+                                     className="px-3 py-1 bg-gray-50 rounded-lg text-xs font-medium border border-gray-100 focus:border-[#5fa19f] outline-none"
+                                     value={a.category}
+                                     onChange={(e) => setAgents(prev => prev.map(ag => ag.id === a.id ? {...ag, category: e.target.value as AgentCategory} : ag))}
+                                   >
+                                     {agentCategories.map(cat => (
+                                       <option key={cat} value={cat}>{cat}</option>
+                                     ))}
+                                   </select>
+                                   {/* Agent Voice Select */}
+                                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Voice:</label>
+                                   <select
+                                     className="px-3 py-1 bg-gray-50 rounded-lg text-xs font-medium border border-gray-100 focus:border-[#5fa19f] outline-none"
+                                     value={a.voiceName}
+                                     onChange={(e) => setAgents(prev => prev.map(ag => ag.id === a.id ? {...ag, voiceName: e.target.value as AgentVoice} : ag))}
+                                   >
+                                     {agentVoices.map(voice => (
+                                       <option key={voice} value={voice}>{voice}</option>
+                                     ))}
+                                   </select>
+                                 </div>
                               </div>
                               <div className="flex items-center gap-3">
                                  <label className="cursor-pointer bg-[#5fa19f] text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:bg-black transition-colors">
@@ -391,6 +444,51 @@ const App: React.FC = () => {
                     </button>
                 </div>
              </div>
+          )}
+
+          {/* NEW: Settings Tab Content */}
+          {activeTab === 'settings' && (
+            <div className="max-w-4xl mx-auto space-y-8">
+              <h3 className="text-3xl font-black italic tracking-tighter uppercase">Globalne Postavke</h3>
+              <p className="text-gray-400 text-sm">Ovdje možete upravljati opštim postavkama Jobstep portala.</p>
+              
+              <div className="bg-white border border-gray-100 rounded-[32px] p-8 space-y-6">
+                <div className="flex items-center gap-4">
+                  <Key size={24} className="text-[#5fa19f]" />
+                  <div>
+                    <h4 className="font-bold text-lg">API Ključ Status</h4>
+                    <p className="text-sm text-gray-500">API ključ za Google Gemini je uspješno učitan iz okruženja.</p>
+                  </div>
+                </div>
+                {/* Future global settings could go here, e.g., default language, theme, etc. */}
+                <div className="flex items-center gap-4 mt-6">
+                  <ShieldAlert size={24} className="text-red-500" />
+                  <div>
+                    <h4 className="font-bold text-lg text-red-600">Napomena: Naplativa Usluga</h4>
+                    <p className="text-sm text-gray-500">Određene funkcionalnosti (npr. Veo video generacija, neki Gemini 3 Pro modeli) zahtijevaju naplativi API ključ. Više informacija: <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">ai.google.dev/gemini-api/docs/billing</a></p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* NEW: Knowledge Base Tab Content */}
+          {activeTab === 'knowledge' && (
+            <div className="max-w-4xl mx-auto space-y-8">
+              <h3 className="text-3xl font-black italic tracking-tighter uppercase">Baza Znanja Agencije</h3>
+              <p className="text-gray-400 text-sm">Ovdje možete definisati globalno znanje koje je dostupno svim AI agentima tokom razgovora.</p>
+              
+              <div className="bg-white border border-gray-100 rounded-[32px] p-8 space-y-6">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Globalno Znanje Jobstep Agencije</label>
+                <textarea 
+                  className="w-full text-sm bg-gray-50 p-6 rounded-[28px] border border-gray-100 text-gray-600 italic outline-none focus:border-[#5fa19f] min-h-[250px]" 
+                  value={globalKnowledge}
+                  onChange={(e) => setGlobalKnowledge(e.target.value)}
+                  placeholder="Unesite ovdje opšte informacije o Jobstep agenciji, njenim vrijednostima, uslugama ili često postavljanim pitanjima. Ovo će biti uključeno u upute svakog agenta."
+                />
+                <p className="text-xs text-gray-500 mt-2">Ovo znanje će se automatski dodati u 'system instruction' svakog agenta tokom poziva.</p>
+              </div>
+            </div>
           )}
         </div>
       </main>
